@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-service
+  namespace: config-service
+  labels:
+    app: config-service
+    repo: config-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: config-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: config-service
+        repo: config-service
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '8080'
+    spec:
+      # see https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+      topologySpreadConstraints:
+      - maxSkew: 1 
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: config-service
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: config-service
+      containers:
+      - name: config-service
+        image: rohanmatkar/config-service:{{BUILD_NUMBER}}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: "SVC_PORT"
+          value: "8080"
+        - name: "ENABLE_METRICS"
+          value: "true"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          exec:
+            command:
+            - pgrep
+            - python
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        resources:
+          requests:
+            cpu: "0.025"
+            memory: "64Mi"
+          limits:
+            cpu: "0.050"
+            memory: "256Mi"
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "trap '' HUP INT TERM ; echo $(date --utc +'%Y-%m-%d %H:%M:%S.%N') [DEBUG] K8sPOSTSTART >/proc/1/fd/1"]
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "trap '' HUP INT TERM ; echo $(date --utc +'%Y-%m-%d %H:%M:%S.%N') [DEBUG] K8sPRESTOP >/proc/1/fd/1 ; kill --signal TERM 1"]
+      terminationGracePeriodSeconds: 10

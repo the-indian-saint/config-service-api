@@ -1,0 +1,19 @@
+FROM python:3.10 as base
+
+ARG BUILD_ENV=dev
+ARG BUILD_VERSION=0.0.1
+
+RUN pip3 install --upgrade pip
+COPY requirements.txt /requirements/
+RUN cd /requirements && pip3 install -r requirements.txt
+
+#chage the user as per your requirements.
+RUN adduser --system --disabled-password --uid 10000 --group --gecos '' docker-user
+#this makes central management easy
+RUN mkdir -p /home/docker-user/hellofresh/config-service && chown docker-user:docker-user /home/docker-user/hellofresh/config-service
+USER docker-user
+
+ENV PYTHONPATH /home/docker-user/hellofresh/config-service/src
+ENV PYTHONUNBUFFERED 1
+
+WORKDIR /home/docker-user/hellofresh/config-service
